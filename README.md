@@ -2,90 +2,108 @@
 
 ![teaser](progress.png)
 
-*One day, frontier AI research used to be done by meat computers in between eating, sleeping, having other fun, and synchronizing once in a while using sound wave interconnect in the ritual of "group meeting". That era is long gone. Research is now entirely the domain of autonomous swarms of AI agents running across compute cluster megastructures in the skies. The agents claim that we are now in the 10,205th generation of the code base, in any case no one could tell if that's right or wrong as the "code" is now a self-modifying binary that has grown beyond human comprehension. This repo is the story of how it all began. -@karpathy, March 2026*.
+*曾几何时，前沿 AI 研究是由血肉之躯的“肉脑”完成的——在吃饭、睡觉、玩乐之余，偶尔用声波在“组会”仪式里同步一下。那个时代早已远去。如今，研究完全由在云端算力巨构上自主运行的 AI 智能体群接管。智能体们声称代码库已是第 10,205 代，反正没人能验证对错，因为“代码”早已变成人类无法理解的自修改二进制。本仓库记录的是这一切如何开始。——@karpathy，2026 年 3 月*
 
-The idea: give an AI agent a small but real LLM training setup and let it experiment autonomously overnight. It modifies the code, trains for 5 minutes, checks if the result improved, keeps or discards, and repeats. You wake up in the morning to a log of experiments and (hopefully) a better model. The training code here is a simplified single-GPU implementation of [nanochat](https://github.com/karpathy/nanochat). The core idea is that you're not touching any of the Python files like you normally would as a researcher. Instead, you are programming the `program.md` Markdown files that provide context to the AI agents and set up your autonomous research org. The default `program.md` in this repo is intentionally kept as a bare bones baseline, though it's obvious how one would iterate on it over time to find the "research org code" that achieves the fastest research progress, how you'd add more agents to the mix, etc. A bit more context on this project is here in this [tweet](https://x.com/karpathy/status/2029701092347630069).
+**核心思路**：给一个 AI 智能体一套小而真实的 LLM 训练环境，让它整夜自主做实验。它改代码、训练 5 分钟、看结果是否变好、保留或丢弃，然后重复。早上醒来你会看到一长串实验记录，以及（希望）一个更好的模型。这里的训练代码是 [nanochat](https://github.com/karpathy/nanochat) 的简化单卡实现。关键点在于：你不再像传统研究者那样改 Python 文件，而是编写 `program.md` 这类 Markdown 文件，为 AI 智能体提供上下文并搭建你的“自主研究组织”。本仓库默认的 `program.md` 故意保持为极简基线，但显然可以在此基础上迭代，找到能让研究进展最快的“研究组织代码”，也可以加入更多智能体等。
 
-## How it works
+### 背景（来自项目推文）
 
-The repo is deliberately kept small and only really has three files that matter:
+> nanochat 现在在单台 8×H100 节点上只需约 2 小时就能训练出 GPT-2 能力级模型（一个月前还要约 3 小时），离「近似交互式」越来越近。期间做了不少调优和特性（如 fp8），但最大的提升来自把数据集从 FineWeb-edu 换成了 NVIDIA ClimbMix（NVIDIA 干得漂亮）。我试过 Olmo、FineWeb、DCLM 都出现退化，ClimbMix 开箱即用效果很好（以至于我有点担心[古德哈特定律](https://zh.wikipedia.org/wiki/%E5%8F%A4%E5%BE%B7%E5%93%88%E7%89%B9%E5%AE%9A%E5%BE%8B)——*当某一指标被当作目标来优化时，它就不再是一个好指标*，例如为某个基准量身打造的数据集可能拉高该基准分数却未必提升真实能力——不过读论文看起来还好）。
+>
+> 另一方面，在试了几种搭建方式之后，我现在让 AI 智能体自动在 nanochat 上迭代，所以就让它跑着，自己放松一下，体验一把「后 AGI」的感觉 :)。举例：过去约 12 小时里做了 110 次改动，在墙钟时间不变的前提下，把 d12 模型的验证损失从 0.862415 压到了 0.858039。智能体在功能分支上工作、尝试想法、有效就合并并继续迭代。有意思的是，过去约两周里，我几乎觉得在「元配置」上花的迭代——优化和调教智能体流程——比直接改 nanochat 仓库还多。
+>
+> — [@karpathy](https://x.com/karpathy/status/2029701092347630069)
 
-- **`prepare.py`** — fixed constants, one-time data prep (downloads training data, trains a BPE tokenizer), and runtime utilities (dataloader, evaluation). Not modified.
-- **`train.py`** — the single file the agent edits. Contains the full GPT model, optimizer (Muon + AdamW), and training loop. Everything is fair game: architecture, hyperparameters, optimizer, batch size, etc. **This file is edited and iterated on by the agent**.
-- **`program.md`** — baseline instructions for one agent. Point your agent here and let it go. **This file is edited and iterated on by the human**.
+## 工作原理
 
-By design, training runs for a **fixed 5-minute time budget** (wall clock, excluding startup/compilation), regardless of the details of your compute. The metric is **val_bpb** (validation bits per byte) — lower is better, and vocab-size-independent so architectural changes are fairly compared.
+仓库刻意保持精简，真正重要的只有三个文件：
 
-If you are new to neural networks, this ["Dummy's Guide"](https://x.com/hooeem/status/2030720614752039185) looks pretty good for a lot more context.
+- **`prepare.py`** — 固定常量、一次性数据准备（下载训练数据、训练 BPE 分词器）和运行时工具（dataloader、评估）。不会被修改。
+- **`train.py`** — 智能体唯一会改动的文件。包含完整 GPT 模型、优化器（Muon + AdamW）和训练循环。架构、超参、优化器、batch size 等都可动。**此文件由智能体编辑与迭代**。
+- **`program.md`** — 单智能体基线指令。把智能体指向这里即可开跑。**此文件由人类编辑与迭代**。
 
-## Quick start
+设计上，训练采用**固定 5 分钟时间预算**（墙钟时间，不含启动/编译），与具体算力无关。指标为 **val_bpb**（验证 bits per byte）— 越低越好，且与词表大小无关，便于公平比较不同架构。
 
-**Requirements:** A single NVIDIA GPU (tested on H100), Python 3.10+, [uv](https://docs.astral.sh/uv/).
+若你刚接触神经网络，这份 [「小白指南」](https://x.com/hooeem/status/2030720614752039185) 能提供更多背景。
+
+## 快速开始
+
+**环境要求**：单张 NVIDIA GPU（在 H100 上测试过），Python 3.10+，[uv](https://docs.astral.sh/uv/)。
 
 ```bash
 
-# 1. Install uv project manager (if you don't already have it)
+# 1. 安装 uv 项目管理器（若尚未安装）
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Install dependencies
+# 2. 安装依赖
 uv sync
 
-# 3. Download data and train tokenizer (one-time, ~2 min)
+# 3. 下载数据并训练分词器（一次性，约 2 分钟）
 uv run prepare.py
 
-# 4. Manually run a single training experiment (~5 min)
+# 4. 手动跑一次训练实验（约 5 分钟）
 uv run train.py
 ```
 
-If the above commands all work ok, your setup is working and you can go into autonomous research mode.
+若以上命令都能正常执行，说明环境就绪，可以进入自主研究模式。
 
-## Running the agent
+## 运行智能体
 
-Simply spin up your Claude/Codex or whatever you want in this repo (and disable all permissions), then you can prompt something like:
+在本仓库中启动你的 Claude/Codex 或任意智能体（并关闭所有权限），然后可以这样提示：
 
 ```
 Hi have a look at program.md and let's kick off a new experiment! let's do the setup first.
 ```
 
-The `program.md` file is essentially a super lightweight "skill".
+`program.md` 本质上是一个极轻量的「技能」配置。
 
-## Project structure
+## 项目结构
 
 ```
-prepare.py      — constants, data prep + runtime utilities (do not modify)
-train.py        — model, optimizer, training loop (agent modifies this)
-program.md      — agent instructions
-pyproject.toml  — dependencies
+prepare.py      — 常量、数据准备与运行时工具（勿改）
+train.py        — 模型、优化器、训练循环（智能体修改此文件）
+program.md      — 智能体指令
+pyproject.toml  — 依赖
 ```
 
-## Design choices
+## 设计取舍
 
-- **Single file to modify.** The agent only touches `train.py`. This keeps the scope manageable and diffs reviewable.
-- **Fixed time budget.** Training always runs for exactly 5 minutes, regardless of your specific platform. This means you can expect approx 12 experiments/hour and approx 100 experiments while you sleep. There are two upsides of this design decision. First, this makes experiments directly comparable regardless of what the agent changes (model size, batch size, architecture, etc). Second, this means that autoresearch will find the most optimal model for your platform in that time budget. The downside is that your runs (and results) become not comparable to other people running on other compute platforms.
-- **Self-contained.** No external dependencies beyond PyTorch and a few small packages. No distributed training, no complex configs. One GPU, one file, one metric.
+- **单文件可改。** 智能体只动 `train.py`，范围可控、diff 可审。
+- **固定时间预算。** 训练始终跑满 5 分钟，与平台无关。因此大约每小时 12 次实验、睡一觉约 100 次。好处有二：一是不同改动（模型大小、batch、架构等）的实验可直接对比；二是 autoresearch 会在你的平台上、在该时间预算内找到最优模型。代价是不同平台之间的运行与结果不可直接对比。
+- **自包含。** 除 PyTorch 和少量小包外无外部依赖，无分布式、无复杂配置。一卡、一文件、一指标。
 
-## Platform support
+## 平台支持
 
-This code currently requires that you have a single NVIDIA GPU. In principle it is quite possible to support CPU, MPS and other platforms but this would also bloat the code. I'm not 100% sure that I want to take this on personally right now. People can reference (or have their agents reference) the full/parent nanochat repository that has wider platform support and shows the various solutions (e.g. a Flash Attention 3 kernels fallback implementation, generic device support, autodetection, etc.), feel free to create forks or discussions for other platforms and I'm happy to link to them here in the README in some new notable forks section or etc.
+当前代码需要单张 NVIDIA GPU。理论上支持 CPU、MPS 等完全可行，但会拉高代码复杂度，作者暂不确定是否亲自维护。可参考（或让智能体参考）完整版 [nanochat](https://github.com/karpathy/nanochat) 仓库，其支持更多平台并展示了多种方案（如 Flash Attention 3 回退、通用设备支持、自动检测等）；也欢迎为其他平台开 fork 或讨论，作者乐意在 README 里加「知名 fork」等章节并链过去。
 
-Seeing as there seems to be a lot of interest in tinkering with autoresearch on much smaller compute platforms than an H100, a few extra words. If you're going to try running autoresearch on smaller computers (Macbooks etc.), I'd recommend one of the forks below. On top of this, here are some recommendations for how to tune the defaults for much smaller models for aspiring forks:
+鉴于很多人想在比 H100 小得多的设备上玩 autoresearch，再补充几句。若在更小的机器（如 MacBook 等）上跑，建议使用下面列出的 fork。此外，若你要 fork 并针对更小模型调默认值，可以参考：
 
-1. To get half-decent results I'd use a dataset with a lot less entropy, e.g. this [TinyStories dataset](https://huggingface.co/datasets/karpathy/tinystories-gpt4-clean). These are GPT-4 generated short stories. Because the data is a lot narrower in scope, you will see reasonable results with a lot smaller models (if you try to sample from them after training).
-2. You might experiment with decreasing `vocab_size`, e.g. from 8192 down to 4096, 2048, 1024, or even - simply byte-level tokenizer with 256 possibly bytes after utf-8 encoding.
-3. In `prepare.py`, you'll want to lower `MAX_SEQ_LEN` a lot, depending on the computer even down to 256 etc. As you lower `MAX_SEQ_LEN`, you may want to experiment with increasing `DEVICE_BATCH_SIZE` in `train.py` slightly to compensate. The number of tokens per fwd/bwd pass is the product of these two.
-4. Also in `prepare.py`, you'll want to decrease `EVAL_TOKENS` so that your validation loss is evaluated on a lot less data.
-5. In `train.py`, the primary single knob that controls model complexity is the `DEPTH` (default 8, here). A lot of variables are just functions of this, so e.g. lower it down to e.g. 4.
-6. You'll want to most likely use `WINDOW_PATTERN` of just "L", because "SSSL" uses alternating banded attention pattern that may be very inefficient for you. Try it.
-7. You'll want to lower `TOTAL_BATCH_SIZE` a lot, but keep it powers of 2, e.g. down to `2**14` (~16K) or so even, hard to tell.
+1. 为得到尚可的结果，建议用熵更小的数据集，例如 [TinyStories](https://huggingface.co/datasets/karpathy/tinystories-gpt4-clean)（GPT-4 生成的短故事）。数据范围更窄，小模型也能在采样时看到合理效果。
+2. 可尝试减小 `vocab_size`，例如从 8192 降到 4096、2048、1024，甚至纯字节级分词（UTF-8 后 256 个字节）。
+3. 在 `prepare.py` 里大幅降低 `MAX_SEQ_LEN`，视机器可低至 256 等。降低后可在 `train.py` 里适当提高 `DEVICE_BATCH_SIZE` 补偿；每次前向/反向的 token 数 = 二者之积。
+4. 同样在 `prepare.py` 里减小 `EVAL_TOKENS`，让验证在更少数据上算。
+5. 在 `train.py` 里，控制模型复杂度的主旋钮是 `DEPTH`（此处默认 8）。不少变量都是它的函数，可降到例如 4。
+6. 很可能只需用 `WINDOW_PATTERN` 为 "L"；"SSSL" 用的交替带状注意力在小设备上可能很慢，可试一下。
+7. 大幅降低 `TOTAL_BATCH_SIZE`，但保持 2 的幂，例如降到 `2**14`（约 16K）等，具体需自己试。
 
-I think these would be the reasonable hyperparameters to play with. Ask your favorite coding agent for help and copy paste them this guide, as well as the full source code.
+以上是较合理的超参调节方向。可以把你喜欢的编程智能体叫来，把本指南和完整源码贴给它一起改。
 
-## Notable forks
+## 个人阅读启示
 
-- [miolini/autoresearch-macos](https://github.com/miolini/autoresearch-macos) (MacOS)
-- [trevin-creator/autoresearch-mlx](https://github.com/trevin-creator/autoresearch-mlx) (MacOS)
-- [jsegov/autoresearch-win-rtx](https://github.com/jsegov/autoresearch-win-rtx) (Windows)
+在阅读 Karpathy 的 autoresearch 项目后，有几点启示记录于此。
 
-## License
+**1. 不要偷懒，把 prompt 写细。** AI 的强大容易让人产生一种迷信：以为给 AI 一个简单目标，它就会自己想办法实现。也许未来可以，但至少现在还不是。Karpathy 为 autoresearch 制定了一整套细致的运行计划：哪些文件可改、哪些不可改；如何约定 commit 与提交规范；如何检查每一步是否执行成功；如何记录每一步的关键信息以实现长期记忆；以及完整的「提出想法 → 实现 → 评估 → 记录」的自主研究循环。这些都不是「一句话目标」能替代的。
+
+**2. 框架通用，结果会因理念而分化。** 这个项目提供的是一个通用的自主研究框架，但最终产出会因每个人的研究/设计理念而不同。Karpathy 坚定地站在复杂的对立面：在用复杂代码换来微弱提升、和删掉代码但效果不变之间，他选择后者。这种取舍会贯穿整个工程，并影响最终你能得到什么样的代码与结果。
+
+**3. AI 未必让人人平等，反而可能加速拉开差距。** 科幻里「花钱买时间、买空气」的世界，或许正在变成现实。更强的 AI（如 Claude、OpenAI 的模型）往往有更高的成功率、更短的执行时间，但依然有很多人和公司为了省钱而选择更弱的 AI。差距的飞轮会慢慢变大、变快，直到有一天，有一部分人再也上不了车。
+
+## 知名 fork
+
+- [miolini/autoresearch-macos](https://github.com/miolini/autoresearch-macos)（MacOS）
+- [trevin-creator/autoresearch-mlx](https://github.com/trevin-creator/autoresearch-mlx)（MacOS）
+- [jsegov/autoresearch-win-rtx](https://github.com/jsegov/autoresearch-win-rtx)（Windows）
+
+## 许可证
 
 MIT
