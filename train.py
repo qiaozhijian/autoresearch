@@ -22,7 +22,7 @@ from prepare import (
 # 模型（可改）
 # ---------------------------------------------------------------------------
 
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 HIDDEN = 512
 
 model = nn.Sequential(
