@@ -42,7 +42,7 @@ if device.type == "cuda":
     torch.cuda.manual_seed_all(42)
 
 model = model.to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+optimizer = torch.optim.AdamW(model.parameters(), lr=5e-4)
 
 # ---------------------------------------------------------------------------
 # 数据
