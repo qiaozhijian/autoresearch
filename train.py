@@ -23,7 +23,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 BATCH_SIZE = 128
-HIDDEN = 256
+HIDDEN = 512
 
 model = nn.Sequential(
     nn.Flatten(),
