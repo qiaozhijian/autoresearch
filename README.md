@@ -4,7 +4,7 @@
 
 *曾几何时，前沿 AI 研究是由血肉之躯的“肉脑”完成的——在吃饭、睡觉、玩乐之余，偶尔用声波在“组会”仪式里同步一下。那个时代早已远去。如今，研究完全由在云端算力巨构上自主运行的 AI 智能体群接管。智能体们声称代码库已是第 10,205 代，反正没人能验证对错，因为“代码”早已变成人类无法理解的自修改二进制。本仓库记录的是这一切如何开始。——@karpathy，2026 年 3 月*
 
-**核心思路**：给一个 AI 智能体一套小而真实的 LLM 训练环境，让它整夜自主做实验。它改代码、训练 5 分钟、看结果是否变好、保留或丢弃，然后重复。早上醒来你会看到一长串实验记录，以及（希望）一个更好的模型。这里的训练代码是 [nanochat](https://github.com/karpathy/nanochat) 的简化单卡实现。关键点在于：你不再像传统研究者那样改 Python 文件，而是编写 `program.md` 这类 Markdown 文件，为 AI 智能体提供上下文并搭建你的“自主研究组织”。本仓库默认的 `program.md` 故意保持为极简基线，但显然可以在此基础上迭代，找到能让研究进展最快的“研究组织代码”，也可以加入更多智能体等。
+**本仓库为分类实验变体**：使用 **MNIST**、**简单 MLP**、**固定 5 分钟**时间预算，目标为**最高 val_accuracy**（同时记录 val_loss）。给一个 AI 智能体这套小环境，让它整夜自主做实验：改代码、训练 5 分钟、看结果是否变好、保留或丢弃，然后重复。关键点在于：你不再改 Python 文件像传统研究者，而是编写 `program.md` 为智能体提供上下文；`prepare.py` 提供数据与评估，`train.py` 为**唯一可改**文件。
 
 ### 背景（来自项目推文）
 
@@ -18,17 +18,15 @@
 
 仓库刻意保持精简，真正重要的只有三个文件：
 
-- **`prepare.py`** — 固定常量、一次性数据准备（下载训练数据、训练 BPE 分词器）和运行时工具（dataloader、评估）。不会被修改。
-- **`train.py`** — 智能体唯一会改动的文件。包含完整 GPT 模型、优化器（Muon + AdamW）和训练循环。架构、超参、优化器、batch size 等都可动。**此文件由智能体编辑与迭代**。
+- **`prepare.py`** — 固定常量、MNIST 数据下载与 DataLoader、评估函数（evaluate_accuracy / evaluate_loss）。不会被修改。
+- **`train.py`** — 智能体唯一会改动的文件。包含 MLP 模型、优化器、训练循环。架构、超参、batch size 等都可动。**此文件由智能体编辑与迭代**。
 - **`program.md`** — 单智能体基线指令。把智能体指向这里即可开跑。**此文件由人类编辑与迭代**。
 
-设计上，训练采用**固定 5 分钟时间预算**（墙钟时间，不含启动/编译），与具体算力无关。指标为 **val_bpb**（验证 bits per byte）— 越低越好，且与词表大小无关，便于公平比较不同架构。
-
-若你刚接触神经网络，这份 [「小白指南」](https://x.com/hooeem/status/2030720614752039185) 能提供更多背景。
+设计上，训练采用**固定 5 分钟时间预算**（墙钟时间，不含启动），与具体算力无关。指标为 **val_accuracy**（验证准确率，越高越好）与 **val_loss**（验证交叉熵，便于分析）。
 
 ## 快速开始
 
-**环境要求**：单张 NVIDIA GPU（在 H100 上测试过），Python 3.10+，[uv](https://docs.astral.sh/uv/)。
+**环境要求**：Python 3.10+，[uv](https://docs.astral.sh/uv/)。CPU 或单 GPU 均可（MNIST + MLP 在 CPU 上几分钟内可跑完）。
 
 ```bash
 
@@ -38,10 +36,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # 2. 安装依赖
 uv sync
 
-# 3. 下载数据并训练分词器（一次性，约 2 分钟）
+# 3. 下载 MNIST 数据（一次性）
 uv run prepare.py
 
-# 4. 手动跑一次训练实验（约 5 分钟）
+# 4. 手动跑一次分类训练（约 5 分钟）
 uv run train.py
 ```
 
@@ -69,24 +67,24 @@ pyproject.toml  — 依赖
 ## 设计取舍
 
 - **单文件可改。** 智能体只动 `train.py`，范围可控、diff 可审。
-- **固定时间预算。** 训练始终跑满 5 分钟，与平台无关。因此大约每小时 12 次实验、睡一觉约 100 次。好处有二：一是不同改动（模型大小、batch、架构等）的实验可直接对比；二是 autoresearch 会在你的平台上、在该时间预算内找到最优模型。代价是不同平台之间的运行与结果不可直接对比。
-- **自包含。** 除 PyTorch 和少量小包外无外部依赖，无分布式、无复杂配置。一卡、一文件、一指标。
+- **固定时间预算。** 训练始终跑满 5 分钟，与平台无关。因此大约每小时 12 次实验、睡一觉约 100 次。不同改动（模型大小、batch、架构等）的实验可直接对比。
+- **自包含。** 仅依赖 PyTorch、torchvision、numpy，无分布式、无复杂配置。一文件、一指标（val_accuracy）。
 
 ## 平台支持
 
-当前代码需要单张 NVIDIA GPU。理论上支持 CPU、MPS 等完全可行，但会拉高代码复杂度，作者暂不确定是否亲自维护。可参考（或让智能体参考）完整版 [nanochat](https://github.com/karpathy/nanochat) 仓库，其支持更多平台并展示了多种方案（如 Flash Attention 3 回退、通用设备支持、自动检测等）；也欢迎为其他平台开 fork 或讨论，作者乐意在 README 里加「知名 fork」等章节并链过去。
+本变体使用 MNIST + MLP，**CPU 或单 GPU 均可**；无 GPU 时自动使用 CPU，几分钟内可完成一次实验。原始 [autoresearch](https://github.com/karpathy/autoresearch) 为 LLM 预训练，需 NVIDIA GPU；若需完整版可参考 [nanochat](https://github.com/karpathy/nanochat)。
 
-鉴于很多人想在比 H100 小得多的设备上玩 autoresearch，再补充几句。若在更小的机器（如 MacBook 等）上跑，建议使用下面列出的 fork。此外，若你要 fork 并针对更小模型调默认值，可以参考：
+## 如何更换研究主题
 
-1. 为得到尚可的结果，建议用熵更小的数据集，例如 [TinyStories](https://huggingface.co/datasets/karpathy/tinystories-gpt4-clean)（GPT-4 生成的短故事）。数据范围更窄，小模型也能在采样时看到合理效果。
-2. 可尝试减小 `vocab_size`，例如从 8192 降到 4096、2048、1024，甚至纯字节级分词（UTF-8 后 256 个字节）。
-3. 在 `prepare.py` 里大幅降低 `MAX_SEQ_LEN`，视机器可低至 256 等。降低后可在 `train.py` 里适当提高 `DEVICE_BATCH_SIZE` 补偿；每次前向/反向的 token 数 = 二者之积。
-4. 同样在 `prepare.py` 里减小 `EVAL_TOKENS`，让验证在更少数据上算。
-5. 在 `train.py` 里，控制模型复杂度的主旋钮是 `DEPTH`（此处默认 8）。不少变量都是它的函数，可降到例如 4。
-6. 很可能只需用 `WINDOW_PATTERN` 为 "L"；"SSSL" 用的交替带状注意力在小设备上可能很慢，可试一下。
-7. 大幅降低 `TOTAL_BATCH_SIZE`，但保持 2 的幂，例如降到 `2**14`（约 16K）等，具体需自己试。
+若你想换一个 research topic（例如从 LLM 预训练改成分类、回归、生成等），需要统一改三处，并保持「prepare 只读、train 可改、program 描述目标与循环」的约定：
 
-以上是较合理的超参调节方向。可以把你喜欢的编程智能体叫来，把本指南和完整源码贴给它一起改。
+| 位置 | 你要改什么 | 以本仓库（分类器）为例 |
+|------|------------|------------------------|
+| **prepare.py** | 常量（输入维度、类别数/词表、时间预算等）、数据下载与 `make_dataloader`、**评估函数**（与任务一致的指标）。 | `INPUT_DIM=784`、`NUM_CLASSES=10`、MNIST DataLoader、`evaluate_accuracy` / `evaluate_loss`。 |
+| **train.py** | 模型结构、损失函数、训练循环；结束时打印**可 grep 的汇总行**（主指标、显存等）。 | MLP + 交叉熵；打印 `val_accuracy:`、`val_loss:`、`peak_vram_mb:`。 |
+| **program.md** | 目标（“最高/最低某指标”）、TSV 列名、`grep` 用的关键字、以及「变好/变差」的判定规则。 | 目标为最高 val_accuracy；TSV 含 val_accuracy、val_loss、memory_gb；`grep "^val_accuracy:\|^val_loss:\|^peak_vram_mb:"`；变好 = accuracy 升高或持平且 loss 降低。 |
+
+此外检查 **pyproject.toml** 的依赖（例如分类用 torchvision，LM 用 tiktoken 等）。本仓库即为「分类器研究」的完整示例，可直接在此基础上替换数据集或模型做其他分类任务。
 
 ## 个人阅读启示
 

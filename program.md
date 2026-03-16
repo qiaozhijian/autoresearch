@@ -1,6 +1,6 @@
 # autoresearch
 
-本实验让 LLM 自主做研究。
+本实验为**分类实验**（MNIST + MLP），让智能体自主改进 val_accuracy。
 
 ## 环境准备
 
@@ -10,9 +10,9 @@
 2. **创建分支**：从当前 master 执行 `git checkout -b autoresearch/<标签>`。
 3. **阅读范围内文件**：仓库很小，请通读以下文件以掌握上下文：
    - `README.md` — 仓库说明。
-   - `prepare.py` — 固定常量、数据准备、分词器、dataloader、评估。勿改。
+   - `prepare.py` — 固定常量、数据准备、dataloader、评估。勿改。
    - `train.py` — 你要改动的文件。模型结构、优化器、训练循环。
-4. **确认数据存在**：检查 `~/.cache/autoresearch/` 下是否有数据分片和分词器。若没有，告知用户执行 `uv run prepare.py`。
+4. **确认数据存在**：检查 `~/.cache/autoresearch/mnist/` 下是否有 MNIST 数据。若没有，告知用户执行 `uv run prepare.py`。
 5. **初始化 results.tsv**：创建 `results.tsv`，只写表头行。基线会在第一次运行后记录。
 6. **确认并开始**：确认环境无误后即可开始实验。
 
@@ -20,21 +20,21 @@
 
 ## 实验规则
 
-每次实验在单 GPU 上运行。训练脚本采用**固定 5 分钟时间预算**（墙钟训练时间，不含启动/编译）。直接执行：`uv run train.py`。
+每次实验在单机（CPU 或单 GPU）上运行。训练脚本采用**固定 5 分钟时间预算**（墙钟训练时间，不含启动）。直接执行：`uv run train.py`。
 
 **你可以做：**
 - 修改 `train.py` — 这是你唯一可编辑的文件。架构、优化器、超参、训练循环、batch size、模型大小等均可改。
 
 **你不可以做：**
-- 修改 `prepare.py`。该文件只读，包含固定评估、数据加载、分词器及训练常量（时间预算、序列长度等）。
+- 修改 `prepare.py`。该文件只读，包含固定评估、数据加载及训练常量（时间预算、INPUT_DIM、NUM_CLASSES 等）。
 - 安装新包或增加依赖。只能使用 `pyproject.toml` 里已有的依赖。
-- 修改评估方式。`prepare.py` 中的 `evaluate_bpb` 是唯一权威指标。
+- 修改评估方式。`prepare.py` 中的 `evaluate_accuracy`、`evaluate_loss` 是唯一权威指标。
 
-**目标很简单：得到最低的 val_bpb。** 因时间预算固定，不必考虑训练时长——始终是 5 分钟。可改的包括：架构、优化器、超参、batch size、模型大小。唯一约束是代码能跑完且不崩溃。
+**目标很简单：得到最高的 val_accuracy。** 同时记录 val_loss 便于分析。因时间预算固定，不必考虑训练时长——始终是 5 分钟。可改的包括：架构、优化器、超参、batch size、模型大小。唯一约束是代码能跑完且不崩溃。
 
-**显存（VRAM）** 是软约束。为获得有意义的 val_bpb 提升可以适当增加占用，但不应暴增。
+**显存（VRAM）** 是软约束。为获得有意义的 val_accuracy 提升可以适当增加占用，但不应暴增。
 
-**简洁性准则**：其他条件相同时，越简单越好。为一点提升引入复杂实现不值得；反之，删掉一些东西且效果持平或更好是很好的结果。评估是否保留某次改动时，要权衡复杂度与提升幅度。例如：多 20 行临时代码换来 0.001 的 val_bpb 提升？多半不值。删代码换来 0.001 提升？一定保留。效果几乎不变但代码简单很多？保留。
+**简洁性准则**：其他条件相同时，越简单越好。为一点提升引入复杂实现不值得；反之，删掉一些东西且效果持平或更好是很好的结果。评估是否保留某次改动时，要权衡复杂度与提升幅度。例如：多 20 行临时代码换来 0.001 的 val_accuracy 提升？多半不值。删代码换来 0.001 提升？一定保留。效果几乎不变但代码简单很多？保留。
 
 **第一次运行**：第一次必须用当前代码跑一次，用于建立基线。
 
@@ -44,47 +44,46 @@
 
 ```
 ---
-val_bpb:          0.997900
+val_accuracy:     0.982300
+val_loss:        0.065400
 training_seconds: 300.1
-total_seconds:    325.9
-peak_vram_mb:     45060.2
-mfu_percent:      39.80
-total_tokens_M:   499.6
-num_steps:        953
-num_params_M:     50.3
-depth:            8
+total_seconds:    305.2
+peak_vram_mb:    123.4
+num_steps:       12000
+num_params:      203530
 ```
 
 脚本会始终在 5 分钟后停止，因此不同机器上具体数字会不同。可从日志中提取关键指标：
 
 ```
-grep "^val_bpb:" run.log
+grep "^val_accuracy:\|^val_loss:\|^peak_vram_mb:" run.log
 ```
 
 ## 记录结果
 
 实验结束后，将结果写入 `results.tsv`（制表符分隔，不要用逗号——逗号会在描述中出问题）。
 
-TSV 含表头及 5 列：
+TSV 含表头及 6 列：
 
 ```
-commit	val_bpb	memory_gb	status	description
+commit	val_accuracy	val_loss	memory_gb	status	description
 ```
 
 1. git commit 短哈希（7 位）
-2. 达到的 val_bpb（如 1.234567）— 崩溃时填 0.000000
-3. 峰值显存（GB），保留一位小数（如 12.3，即 peak_vram_mb / 1024）— 崩溃时填 0.0
-4. status：`keep`、`discard` 或 `crash`
-5. 简短描述本实验尝试了什么
+2. 达到的 val_accuracy（0~1，如 0.9823）— 崩溃时填 0.000000
+3. 达到的 val_loss（如 0.0654）— 崩溃时填 0.000000
+4. 峰值显存（GB），保留一位小数（即 peak_vram_mb / 1024）— 崩溃时填 0.0
+5. status：`keep`、`discard` 或 `crash`
+6. 简短描述本实验尝试了什么
 
 示例：
 
 ```
-commit	val_bpb	memory_gb	status	description
-a1b2c3d	0.997900	44.0	keep	baseline
-b2c3d4e	0.993200	44.2	keep	LR 提到 0.04
-c3d4e5f	1.005000	44.0	discard	改用 GeLU
-d4e5f6g	0.000000	0.0	crash	模型宽度加倍 (OOM)
+commit	val_accuracy	val_loss	memory_gb	status	description
+a1b2c3d	0.982300	0.0654	0.1	keep	baseline
+b2c3d4e	0.985100	0.0521	0.1	keep	LR 提到 0.002
+c3d4e5f	0.978000	0.0712	0.1	discard	隐藏层缩小到 64
+d4e5f6g	0.000000	0.000000	0.0	crash	模型过宽 (OOM)
 ```
 
 ## 实验循环
@@ -97,11 +96,11 @@ d4e5f6g	0.000000	0.0	crash	模型宽度加倍 (OOM)
 2. 按实验想法直接改 `train.py`
 3. git commit
 4. 运行实验：`uv run train.py > run.log 2>&1`（全部重定向到文件，不要用 tee，也不要让输出刷满上下文）
-5. 读取结果：`grep "^val_bpb:\|^peak_vram_mb:" run.log`
+5. 读取结果：`grep "^val_accuracy:\|^val_loss:\|^peak_vram_mb:" run.log`
 6. 若 grep 无输出，说明运行崩溃。执行 `tail -n 50 run.log` 查看 Python 报错并尝试修复。若多次仍无法修复，则放弃该想法。
 7. 将结果写入 tsv（注意：不要 commit results.tsv，保持未跟踪）
-8. 若 val_bpb 变好（更低），则“前进”，保留该 commit
-9. 若 val_bpb 持平或变差，则 `git reset` 回退到本轮开始前
+8. 若 val_accuracy 变好（更高），或持平且 val_loss 更低，则“前进”，保留该 commit
+9. 若 val_accuracy 变差（更低），或持平且 val_loss 更高，则 `git reset` 回退到本轮开始前
 
 理念是：你是一名完全自主的研究员，不断尝试。有效就保留，无效就丢弃，通过推进分支持续迭代。若感到卡住，可以回退分支，但应极其谨慎。
 
